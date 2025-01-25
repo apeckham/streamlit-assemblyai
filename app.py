@@ -55,60 +55,30 @@ if uploaded_file and api_key:
         if st.session_state.transcript.status == aai.TranscriptStatus.error:
             st.error(f"Transcription failed: {st.session_state.transcript.error}")
         else:
-            # Add copy button
-            if st.button("Copy Full Transcript (with Speaker Labels)"):
-                # Format text with speaker labels
-                formatted_text = []
-                for utterance in st.session_state.transcript.utterances:
-                    formatted_text.append(f"Speaker {utterance.speaker}: {utterance.text}")
-                formatted_text = "\n\n".join(formatted_text)
-                
-                # Use base64 to safely transfer the text
-                import base64
-                encoded_text = base64.b64encode(formatted_text.encode()).decode()
-                st.components.v1.html(
-                    """
-                        <div id="copyHelper" style="display: none;" data-text="{}"></div>
-                    <script>
-                        // Focus the window first
-                        window.focus();
-                        document.body.focus();
-                        
-                        // Small delay to ensure focus is set
-                        setTimeout(() => {{
-                            const encodedText = document.getElementById('copyHelper').dataset.text;
-                            const decodedText = atob(encodedText);
-                            navigator.clipboard.writeText(decodedText)
-                                .then(() => {{
-                                    window.parent.document.querySelector('[data-testid="stMarkdownContainer"]').innerHTML = "Transcript copied to clipboard! ✨";
-                                }})
-                                .catch(err => {{
-                                    console.error('Failed to copy:', err);
-                                    window.parent.document.querySelector('[data-testid="stMarkdownContainer"]').innerHTML = "Failed to copy to clipboard";
-                                }});
-                        }}, 100);
-                    </script>
-                    """.format(encoded_text),
-                    height=0
-                )
+            # Format text with speaker labels and escape for HTML/JS
+            formatted_text = []
+            for utterance in st.session_state.transcript.utterances:
+                formatted_text.append(f"Speaker {utterance.speaker}: {utterance.text}")
+            formatted_text = "\n\n".join(formatted_text)
+            
+            import html
+            escaped_formatted_text = html.escape(formatted_text).replace('"', '&quot;')
 
-            # Add CSS for transcript formatting
-            st.markdown("""
-                <style>
-                    .transcript-line { display: block; padding-left: 2em; text-indent: -2em; margin: 0.5em 0; }
-                    .speaker-label { font-weight: bold; }
-                </style>
-            """, unsafe_allow_html=True)
+            # Add Alpine.js and clipboard plugin
+            st.components.v1.html(f"""
+                <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+                <script src="https://cdn.jsdelivr.net/npm/@ryangjchandler/alpine-clipboard@2.x.x/dist/alpine-clipboard.js" defer></script>
+                <div x-data>
+                    <div x-clipboard.raw="{escaped_formatted_text}" style="cursor:pointer;text-decoration:underline">
+                        Copy Full Transcript
+                    </div>
+                </div>
+            """, height=50)
             
             # Display speaker-separated transcript
             st.subheader("Transcript by Speaker")
-            import html
             for utterance in st.session_state.transcript.utterances:
-                escaped_text = html.escape(utterance.text)
-                st.write(
-                    f'<div class="transcript-line"><span class="speaker-label">Speaker {utterance.speaker}:</span> {escaped_text}</div>',
-                    unsafe_allow_html=True
-                )
+                st.write(f"Speaker {utterance.speaker}: {utterance.text}")
 
 elif not api_key:
     st.warning("Please enter your AssemblyAI API key to continue.")
